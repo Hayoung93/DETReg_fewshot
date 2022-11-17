@@ -1,4 +1,5 @@
 # Modified codes from https://github.com/amirbar/DETReg, adding few-shot training process (table 3, 4 of the origin paper) using few-shot splits from https://github.com/ucbdrive/few-shot-object-detection
+Usage: GPUS_PER_NODE=8 ./tools/run_dist_launch.sh 8 ./configs/DETReg_fine_tune_full_coco.sh --batch_size 2 --num_workers 0 --finetune_base_epochs 0 --finetune_few_epochs 2 --output_dir temp --dataset coco_few
 
 # DETReg: Unsupervised Pretraining with Region Priors for Object Detection (CVPR 2022)
 ### [Amir Bar](https://amirbar.net), [Xin Wang](https://xinw.ai/), [Vadim Kantorov](http://vadimkantorov.com/), [Colorado J Reed](https://people.eecs.berkeley.edu/~cjrd/), [Roei Herzig](https://roeiherz.github.io/), [Gal Chechik](https://chechiklab.biu.ac.il/), [Anna Rohrbach](https://anna-rohrbach.net/), [Trevor Darrell](https://people.eecs.berkeley.edu/~trevor/), [Amir Globerson](http://www.cs.tau.ac.il/~gamir/)
