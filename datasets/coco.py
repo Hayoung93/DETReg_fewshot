@@ -12,13 +12,16 @@ COCO dataset which returns image_id for evaluation.
 
 Mostly copy-paste from https://github.com/pytorch/vision/blob/13b35ff/references/detection/coco_utils.py
 """
+import os
 from pathlib import Path
 import numpy as np
 import torch
 import torch.utils.data
 from pycocotools import mask as coco_mask
+from pycocotools.coco import COCO
 
 from .torchvision_datasets import CocoDetection as TvCocoDetection
+from .torchvision_datasets import CocoDetectionFew as TvCocoDetectionFew
 from util.misc import get_local_rank, get_local_size
 import datasets.transforms as T
 
@@ -183,4 +186,103 @@ def build(image_set, args):
         filter_pct = args.filter_pct
     dataset = CocoDetection(img_folder, ann_file, transforms=make_coco_transforms(image_set), return_masks=args.masks,
                             cache_mode=args.cache_mode, local_rank=get_local_rank(), local_size=get_local_size(), no_cats=no_cats, filter_pct=filter_pct, seed=args.seed)
+    return dataset
+
+
+
+class CocoDetectionFew(TvCocoDetectionFew):
+    def __init__(self, img_folder, anns, transforms, return_masks, cache_mode=False, local_rank=0, local_size=1, no_cats=False, filter_classes=[], shot=None, seed=42):
+        super(CocoDetectionFew, self).__init__(img_folder, anns,
+                                            cache_mode=cache_mode, local_rank=local_rank, local_size=local_size)
+        self._transforms = transforms
+        self.prepare = ConvertCocoPolysToMask(return_masks)
+        self.no_cats = no_cats
+        self.filter_classes = filter_classes
+        # filter ids with anns (common set)
+        for ann in anns[1:]:
+            if os.path.isfile(ann) and ann.split(".")[-1] == "json":
+                ids_a = set(self.ids)
+                coco = COCO(ann)
+                ids_b = set(coco.imgs.keys())
+                self.ids = sorted(list(ids_a.intersection(ids_b)))
+            elif os.path.isdir(ann):
+                ids_a = set(self.ids)
+                ids_b = set()
+                for ann_json in os.listdir(ann):
+                    if ann_json.split(".")[-1] != "json":
+                        continue
+                    if shot is not None:
+                        if not "{}shot".format(shot) in ann_json:
+                            continue
+                    coco = COCO(os.path.join(ann, ann_json))
+                    ids_b.update(coco.imgs.keys())
+                self.ids = sorted(list(ids_a.intersection(ids_b)))
+        # filter image ids
+        if len(filter_classes) > 0:
+            # filter image ids
+            new_ids = set()
+            for cat in filter_classes:
+                # get image ids that contains current category
+                cat_ids = self.coco.getImgIds(self.ids, cat)
+                new_ids.update(cat_ids)
+            self.ids = sorted(list(new_ids))
+
+    def __getitem__(self, idx):
+        # filter annotation ids with given classes
+        img, target = super(CocoDetectionFew, self).__getitem__(idx, self.filter_classes)
+        image_id = self.ids[idx]
+        target = {'image_id': image_id, 'annotations': target}
+        img, target = self.prepare(img, target)
+        if self._transforms is not None:
+            img, target = self._transforms(img, target)
+        if self.no_cats:
+            target['labels'][:] = 1
+        return img, target
+
+
+def build_fewshot(args, trainval, classset, shot):
+    # trainval과 classet에 따라 사용되는 dataset:
+    # train, base -> train2014.json과 trainvalno5k.json의 교집합 (=train2014.json에서 5k.json을 제외한 집합) 중 base_classes를 가지는 images, 단, 해당 images에서 novel_classes의 annotation은 제거
+    # val, base -> val2014.json과 trainvalno5k.json의 교집합 (=val2014.json에서 5k.json을 제외한 집합) 중 base_classes를 가지는 images, 단, 해당 images에서 novel_classes의 annotation은 제거
+    # train, all -> fewshot json들과 train2014.json의 교집합
+    # val, all -> fewshot json들과 val2014.json의 교집합
+    # val, novel -> 5k.json에서 novel_classes를 가지는 images, 단, 해당 images에서 base_classes의 annotation은 제거
+
+    novel_classes = [1, 2, 3, 4, 5, 6, 7, 9, 16, 17, 18, 19, 20, 21, 44, 62, 63, 64, 67, 72]
+    base_classes = [
+        8, 10, 11, 13, 14, 15, 22, 23, 24, 25, 27, 28, 31, 32, 33, 34, 35,
+        36, 37, 38, 39, 40, 41, 42, 43, 46, 47, 48, 49, 50, 51, 52, 53, 54,
+        55, 56, 57, 58, 59, 60, 61, 65, 70, 73, 74, 75, 76, 77, 78, 79, 80,
+        81, 82, 84, 85, 86, 87, 88, 89, 90,
+    ]
+    root = Path(args.coco_path)
+    assert root.exists(), f'provided COCO path {root} does not exist'
+
+    if classset == "base":
+        if trainval == "train":
+            img_folder = os.path.join(str(root), "train2014")
+            filter_classes = base_classes
+            anns = ["/data/data/MSCoco/2014/instances_train2014.json", "/data/data/cocosplit/datasplit/trainvalno5k.json"]
+        elif trainval == "val":
+            img_folder = os.path.join(str(root), "val2014")
+            filter_classes = base_classes
+            anns = ["/data/data/MSCoco/2014/instances_val2014.json", "/data/data/cocosplit/datasplit/trainvalno5k.json"]
+    elif classset =="all":
+        if trainval == "train":
+            img_folder = os.path.join(str(root), "train2014")
+            filter_classes = []
+            anns = ["/data/data/MSCoco/2014/instances_train2014.json", "/data/data/cocosplit/seed1/"]
+        elif trainval == "val":
+            img_folder = os.path.join(str(root), "val2014")
+            filter_classes = []
+            anns = ["/data/data/MSCoco/2014/instances_val2014.json", "/data/data/cocosplit/seed1/"]
+    elif classset == "novel":
+        assert trainval == "val", "Only validation mode is supported when novel classes is selected"
+        img_folder = os.path.join(str(root), "val2014")
+        filter_classes = novel_classes
+        anns = ["/data/data/cocosplit/datasplit/5k.json"]
+
+    no_cats = False
+    dataset = CocoDetectionFew(img_folder, anns, transforms=make_coco_transforms(trainval), return_masks=args.masks,
+                            cache_mode=args.cache_mode, local_rank=get_local_rank(), local_size=get_local_size(), no_cats=no_cats, filter_classes=filter_classes, shot=shot, seed=args.seed)
     return dataset

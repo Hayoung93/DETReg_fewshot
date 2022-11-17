@@ -8,9 +8,10 @@
 # ------------------------------------------------------------------------
 
 import torch.utils.data
-from .torchvision_datasets import CocoDetection
+from .torchvision_datasets import CocoDetection, CocoDetectionFew
 
 from .coco import build as build_coco
+from .coco import build_fewshot
 
 
 def get_coco_api_from_dataset(dataset):
@@ -20,6 +21,8 @@ def get_coco_api_from_dataset(dataset):
         if isinstance(dataset, torch.utils.data.Subset):
             dataset = dataset.dataset
     if isinstance(dataset, CocoDetection):
+        return dataset.coco
+    if isinstance(dataset, CocoDetectionFew):
         return dataset.coco
 
 
@@ -31,3 +34,6 @@ def build_dataset(image_set, args):
         from .coco_panoptic import build as build_coco_panoptic
         return build_coco_panoptic(image_set, args)
     raise ValueError(f'dataset {args.dataset_file} not supported')
+
+def build_coco_few(args, trainval, classset, shot=None):
+    return build_fewshot(args, trainval, classset, shot)

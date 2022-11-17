@@ -55,6 +55,9 @@ def get_args_parser():
     parser.add_argument('--filter_num', type=float, default=-1)
     parser.add_argument('--reset_embedding_layer', type=int, default=1)
 
+    parser.add_argument("--finetune_base_epochs", type=int, default=0)
+    parser.add_argument("--finetune_few_epochs", type=int, default=2)
+
     # Variants of Deformable DETR
     parser.add_argument('--with_box_refine', default=False, action='store_true')
     parser.add_argument('--two_stage', default=False, action='store_true')
@@ -143,7 +146,7 @@ def get_args_parser():
                         help='start epoch')
     parser.add_argument('--eval', action='store_true')
     parser.add_argument('--viz', action='store_true')
-    parser.add_argument('--num_workers', default=2, type=int)
+    parser.add_argument('--num_workers', default=0, type=int)
     parser.add_argument('--cache_mode', default=False, action='store_true', help='whether to cache images on memory')
     parser.add_argument('--object_embedding_loss', default=False, action='store_true', help='whether to use this loss')
     #detr

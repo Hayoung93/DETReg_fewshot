@@ -22,7 +22,7 @@ from torch.utils.data import DataLoader
 import datasets
 import util.misc as utils
 import datasets.samplers as samplers
-from datasets import build_dataset, get_coco_api_from_dataset
+from datasets import build_dataset, get_coco_api_from_dataset, build_coco_few
 from engine import evaluate, train_one_epoch, viz
 from models import build_model
 from models.backbone import build_swav_backbone, build_swav_backbone_old
@@ -69,28 +69,58 @@ def main(args):
                        for p in model.parameters() if p.requires_grad)
     print('number of params:', n_parameters)
 
-    dataset_train, dataset_val = get_datasets(args)
+    # dataset_train, dataset_val = get_datasets(args)
+    dataset_train_base, dataset_val_base, dataset_train_all_few, dataset_val_all_few, dataset_val_novel_few = get_datasets(args)
 
     if args.distributed:
         if args.cache_mode:
-            sampler_train = samplers.NodeDistributedSampler(dataset_train)
-            sampler_val = samplers.NodeDistributedSampler(
-                dataset_val, shuffle=False)
+            # sampler_train = samplers.NodeDistributedSampler(dataset_train)
+            # sampler_val = samplers.NodeDistributedSampler(dataset_val, shuffle=False)
+            sampler_train_base = samplers.NodeDistributedSampler(dataset_train_base)
+            sampler_val_base = samplers.NodeDistributedSampler(dataset_val_base, shuffle=False)
+            sampler_train_all_few = samplers.NodeDistributedSampler(dataset_train_all_few)
+            sampler_val_all_few = samplers.NodeDistributedSampler(dataset_val_all_few, shuffle=False)
+            sampler_val_novel_few = samplers.NodeDistributedSampler(dataset_val_novel_few, shuffle=False)
         else:
-            sampler_train = samplers.DistributedSampler(dataset_train)
-            sampler_val = samplers.DistributedSampler(
-                dataset_val, shuffle=False)
+            # sampler_train = samplers.DistributedSampler(dataset_train)
+            # sampler_val = samplers.DistributedSampler(dataset_val, shuffle=False)
+            sampler_train_base = samplers.DistributedSampler(dataset_train_base)
+            sampler_val_base = samplers.DistributedSampler(dataset_val_base, shuffle=False)
+            sampler_train_all_few = samplers.DistributedSampler(dataset_train_all_few)
+            sampler_val_all_few = samplers.DistributedSampler(dataset_val_all_few, shuffle=False)
+            sampler_val_novel_few = samplers.DistributedSampler(dataset_val_novel_few, shuffle=False)
     else:
-        sampler_train = torch.utils.data.RandomSampler(dataset_train)
-        sampler_val = torch.utils.data.SequentialSampler(dataset_val)
+        # sampler_train = torch.utils.data.RandomSampler(dataset_train)
+        # sampler_val = torch.utils.data.SequentialSampler(dataset_val)
+        sampler_train_base = torch.utils.data.RandomSampler(dataset_train_base)
+        sampler_val_base = torch.utils.data.SequentialSampler(dataset_val_base)
+        sampler_train_all_few = torch.utils.data.RandomSampler(dataset_train_all_few)
+        sampler_val_all_few = torch.utils.data.SequentialSampler(dataset_val_all_few)
+        sampler_val_novel_few = torch.utils.data.SequentialSampler(dataset_val_novel_few)
     coco_evaluator = None
-    batch_sampler_train = torch.utils.data.BatchSampler(
-        sampler_train, args.batch_size, drop_last=True)
+    # batch_sampler_train = torch.utils.data.BatchSampler(sampler_train, args.batch_size, drop_last=True)
+    batch_sampler_train_base = torch.utils.data.BatchSampler(sampler_train_base, args.batch_size, drop_last=True)
+    batch_sampler_train_all_few = torch.utils.data.BatchSampler(sampler_train_all_few, args.batch_size, drop_last=True)
 
-    data_loader_train = DataLoader(dataset_train, batch_sampler=batch_sampler_train,
+    # data_loader_train = DataLoader(dataset_train, batch_sampler=batch_sampler_train,
+    #                                collate_fn=utils.collate_fn, num_workers=args.num_workers,
+    #                                pin_memory=True)
+    # data_loader_val = DataLoader(dataset_val, args.batch_size, sampler=sampler_val,
+    #                              drop_last=False, collate_fn=utils.collate_fn, num_workers=args.num_workers,
+    #                              pin_memory=True)
+    data_loader_train_base = DataLoader(dataset_train_base, batch_sampler=batch_sampler_train_base,
                                    collate_fn=utils.collate_fn, num_workers=args.num_workers,
                                    pin_memory=True)
-    data_loader_val = DataLoader(dataset_val, args.batch_size, sampler=sampler_val,
+    data_loader_val_base = DataLoader(dataset_val_base, args.batch_size, sampler=sampler_val_base,
+                                 drop_last=False, collate_fn=utils.collate_fn, num_workers=args.num_workers,
+                                 pin_memory=True)
+    data_loader_train_all_few = DataLoader(dataset_train_all_few, batch_sampler=batch_sampler_train_all_few,
+                                   collate_fn=utils.collate_fn, num_workers=args.num_workers,
+                                   pin_memory=True)
+    data_loader_val_all_few = DataLoader(dataset_val_all_few, args.batch_size, sampler=sampler_val_all_few,
+                                 drop_last=False, collate_fn=utils.collate_fn, num_workers=args.num_workers,
+                                 pin_memory=True)
+    data_loader_val_novel_few = DataLoader(dataset_val_novel_few, args.batch_size, sampler=sampler_val_novel_few,
                                  drop_last=False, collate_fn=utils.collate_fn, num_workers=args.num_workers,
                                  pin_memory=True)
 
@@ -135,14 +165,17 @@ def main(args):
             model, device_ids=[args.gpu])
         model_without_ddp = model.module
 
-    if args.dataset_file == "coco_panoptic":
-        # We also evaluate AP during panoptic training, on original coco DS
-        coco_val = datasets.coco.build("val", args)
-        base_ds = get_coco_api_from_dataset(coco_val)
-    elif args.dataset_file == "coco" or args.dataset_file == "airbus":
-        base_ds = get_coco_api_from_dataset(dataset_val)
-    else:
-        base_ds = dataset_val
+    # if args.dataset_file == "coco_panoptic":
+    #     # We also evaluate AP during panoptic training, on original coco DS
+    #     coco_val = datasets.coco.build("val", args)
+    #     base_ds = get_coco_api_from_dataset(coco_val)
+    # elif args.dataset_file == "coco" or args.dataset_file == "airbus":
+    #     base_ds = get_coco_api_from_dataset(dataset_val)
+    # else:
+    #     base_ds = dataset_val
+    base_ds_base = get_coco_api_from_dataset(dataset_val_base)
+    base_ds_all_few = get_coco_api_from_dataset(dataset_val_all_few)
+    base_ds_novel_few = get_coco_api_from_dataset(dataset_val_novel_few)
 
     if args.frozen_weights is not None:
         checkpoint = torch.load(args.frozen_weights, map_location='cpu')
@@ -195,30 +228,43 @@ def main(args):
             args.start_epoch = checkpoint['epoch'] + 1
         # check the resumed model
         if (not args.eval and not args.viz and args.dataset in ['coco', 'voc']):
-            test_stats, coco_evaluator = evaluate(
-                model, criterion, postprocessors, data_loader_val, base_ds, device, args.output_dir
-            )
+            # test_stats, coco_evaluator = evaluate(model, criterion, postprocessors, data_loader_val, base_ds, device, args.output_dir)
+            test_stats, coco_evaluator = evaluate(model, criterion, postprocessors, data_loader_val_base, base_ds_base, device, args.output_dir)
+            test_stats, coco_evaluator = evaluate(model, criterion, postprocessors, data_loader_val_all_few, base_ds_all_few, device, args.output_dir)
+            test_stats, coco_evaluator = evaluate(model, criterion, postprocessors, data_loader_val_novel_few, base_ds_novel_few, device, args.output_dir)
 
     if args.eval:
-        test_stats, coco_evaluator = evaluate(model, criterion, postprocessors,
-                                              data_loader_val, base_ds, device, args.output_dir)
+        # test_stats, coco_evaluator = evaluate(model, criterion, postprocessors,
+        #                                       data_loader_val, base_ds, device, args.output_dir)
+        test_stats, coco_evaluator = evaluate(model, criterion, postprocessors, data_loader_val_base, base_ds_base, device, args.output_dir)
+        test_stats, coco_evaluator = evaluate(model, criterion, postprocessors, data_loader_val_all_few, base_ds_all_few, device, args.output_dir)
+        test_stats, coco_evaluator = evaluate(model, criterion, postprocessors, data_loader_val_novel_few, base_ds_novel_few, device, args.output_dir)
 
         if args.output_dir:
             utils.save_on_master(coco_evaluator.coco_eval["bbox"].eval, output_dir / "eval.pth")
         return
 
     if args.viz:
-        viz(model, criterion, postprocessors,
-            data_loader_val, base_ds, device, args.output_dir)
+        # viz(model, criterion, postprocessors, data_loader_val, base_ds, device, args.output_dir)
+        viz(model, criterion, postprocessors, data_loader_val_base, base_ds_base, device, args.output_dir)
+        viz(model, criterion, postprocessors, data_loader_val_all_few, base_ds_all_few, device, args.output_dir)
+        viz(model, criterion, postprocessors, data_loader_val_novel_few, base_ds_novel_few, device, args.output_dir)
         return
 
     print("Start training")
     start_time = time.time()
-    for epoch in range(args.start_epoch, args.epochs):
-        if args.distributed:
-            sampler_train.set_epoch(epoch)
-        train_stats = train_one_epoch(
-            model, swav_model, criterion, data_loader_train, optimizer, device, epoch, args.clip_max_norm)
+    # for epoch in range(args.start_epoch, args.epochs):
+    for epoch in range(args.start_epoch, args.finetune_base_epochs + args.finetune_few_epochs):
+        if epoch <= args.finetune_base_epochs - 1:
+            if args.distributed:
+                sampler_train_base.set_epoch(epoch)
+            train_stats = train_one_epoch(
+                model, swav_model, criterion, data_loader_train_base, optimizer, device, epoch, args.clip_max_norm)
+        else:
+            if args.distributed:
+                sampler_train_all_few.set_epoch(epoch)
+            train_stats = train_one_epoch(
+                model, swav_model, criterion, data_loader_train_all_few, optimizer, device, epoch, args.clip_max_norm)
         lr_scheduler.step()
         if args.output_dir:
             checkpoint_paths = [output_dir / 'checkpoint.pth']
@@ -233,10 +279,16 @@ def main(args):
                     'epoch': epoch,
                     'args': args,
                 }, checkpoint_path)
-        if args.dataset in ['coco', 'voc'] and epoch % args.eval_every == 0:
-            test_stats, coco_evaluator = evaluate(
-                model, criterion, postprocessors, data_loader_val, base_ds, device, args.output_dir
-            )
+        if args.dataset in ['coco', 'voc', 'coco_few'] and epoch % args.eval_every == 0:
+            if epoch <= args.finetune_base_epochs - 1:
+                test_stats, coco_evaluator = evaluate(
+                    model, criterion, postprocessors, data_loader_val_base, base_ds_base, device, args.output_dir)
+            elif epoch <= args.finetune_base_epochs + args.finetune_few_epochs - 2:
+                test_stats, coco_evaluator = evaluate(
+                    model, criterion, postprocessors, data_loader_val_all_few, base_ds_all_few, device, args.output_dir)
+            else:  # last epoch
+                test_stats, coco_evaluator = evaluate(
+                    model, criterion, postprocessors, data_loader_val_novel_few, base_ds_novel_few, device, args.output_dir)
         else:
             test_stats = {}
 
@@ -269,6 +321,16 @@ def get_datasets(args):
     if args.dataset == 'coco':
         dataset_train = build_dataset(image_set='train', args=args)
         dataset_val = build_dataset(image_set='val', args=args)
+    elif 'coco_few' in args.dataset:
+        # "base" dataset for training 60 cats (first stage)
+        dataset_train_base = build_coco_few(args, "train", "base")
+        dataset_val_base = build_coco_few(args, "val", "base")
+        # "all_few" dataset for training 80 cats with k instances (second stage)
+        dataset_train_all_few = build_coco_few(args, "train", "all", shot=10)
+        dataset_val_all_few = build_coco_few(args, "val", "all", shot=10)
+        # "novel_few" dataset for evaluation
+        dataset_val_novel_few = build_coco_few(args, "val", "novel")
+        return dataset_train_base, dataset_val_base, dataset_train_all_few, dataset_val_all_few, dataset_val_novel_few
     elif args.dataset == 'coco_pretrain':
         from datasets.selfdet import build_selfdet
         dataset_train = build_selfdet(
@@ -306,7 +368,8 @@ def get_datasets(args):
 
 
 def set_dataset_path(args):
-    args.coco_path = os.path.join(args.data_root, 'MSCoco')
+    # args.coco_path = os.path.join(args.data_root, 'MSCoco')
+    args.coco_path = "/data/data/MSCoco/2014"
     args.airbus_path = os.path.join(args.data_root, 'airbus-ship-detection')
     args.imagenet_path = os.path.join(args.data_root, 'ilsvrc')
     args.imagenet100_path = os.path.join(args.data_root, 'ilsvrc100')
