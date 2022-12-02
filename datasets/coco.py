@@ -262,25 +262,25 @@ def build_fewshot(args, trainval, classset, shot):
         if trainval == "train":
             img_folder = os.path.join(str(root), "train2014")
             filter_classes = base_classes
-            anns = ["/data/data/MSCoco/2014/instances_train2014.json", "/data/data/cocosplit/datasplit/trainvalno5k.json"]
+            anns = [os.path.join(args.coco_path, "annotations", "instances_train2014.json"), os.path.join(args.coco_fewshot_path, "datasplit", "trainvalno5k.json")]
         elif trainval == "val":
             img_folder = os.path.join(str(root), "val2014")
             filter_classes = base_classes
-            anns = ["/data/data/MSCoco/2014/instances_val2014.json", "/data/data/cocosplit/datasplit/trainvalno5k.json"]
+            anns = [os.path.join(args.coco_path, "annotations", "instances_val2014.json"), os.path.join(args.coco_fewshot_path, "datasplit", "trainvalno5k.json")]
     elif classset =="all":
         if trainval == "train":
             img_folder = os.path.join(str(root), "train2014")
             filter_classes = []
-            anns = ["/data/data/MSCoco/2014/instances_train2014.json", "/data/data/cocosplit/seed1/"]
+            anns = [os.path.join(args.coco_path, "annotations", "instances_train2014.json"), os.path.join(args.coco_fewshot_path, "seed" + args.fewshot_seed)]
         elif trainval == "val":
             img_folder = os.path.join(str(root), "val2014")
             filter_classes = []
-            anns = ["/data/data/MSCoco/2014/instances_val2014.json", "/data/data/cocosplit/seed1/"]
+            anns = [os.path.join(args.coco_path, "annotations", "instances_val2014.json"), os.path.join(args.coco_fewshot_path, "seed" + args.fewshot_seed)]
     elif classset == "novel":
         assert trainval == "val", "Only validation mode is supported when novel classes is selected"
         img_folder = os.path.join(str(root), "val2014")
         filter_classes = novel_classes
-        anns = ["/data/data/cocosplit/datasplit/5k.json"]
+        anns = [os.path.join(args.coco_fewshot_path, "datasplit", "5k.json")]
 
     no_cats = False
     dataset = CocoDetectionFew(img_folder, anns, transforms=make_coco_transforms(trainval), return_masks=args.masks,

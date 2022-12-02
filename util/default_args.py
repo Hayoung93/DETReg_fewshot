@@ -57,6 +57,10 @@ def get_args_parser():
 
     parser.add_argument("--finetune_base_epochs", type=int, default=0)
     parser.add_argument("--finetune_few_epochs", type=int, default=2)
+    parser.add_argument("--coco_path", type=str, default="/data/data/MSCoco_2014")
+    parser.add_argument("--coco_fewshot_path", type=str, default="/data/data/cocosplit/", help="Path to the root directory that contains coco fewshot json files")
+    parser.add_argument("--shot", type=int, default=10)
+    parser.add_argument("--fewshot_seed", type=str, default="1")
 
     # Variants of Deformable DETR
     parser.add_argument('--with_box_refine', default=False, action='store_true')

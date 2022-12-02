@@ -326,8 +326,8 @@ def get_datasets(args):
         dataset_train_base = build_coco_few(args, "train", "base")
         dataset_val_base = build_coco_few(args, "val", "base")
         # "all_few" dataset for training 80 cats with k instances (second stage)
-        dataset_train_all_few = build_coco_few(args, "train", "all", shot=10)
-        dataset_val_all_few = build_coco_few(args, "val", "all", shot=10)
+        dataset_train_all_few = build_coco_few(args, "train", "all", shot=args.shot)
+        dataset_val_all_few = build_coco_few(args, "val", "all", shot=args.shot)
         # "novel_few" dataset for evaluation
         dataset_val_novel_few = build_coco_few(args, "val", "novel")
         return dataset_train_base, dataset_val_base, dataset_train_all_few, dataset_val_all_few, dataset_val_novel_few
@@ -369,7 +369,8 @@ def get_datasets(args):
 
 def set_dataset_path(args):
     # args.coco_path = os.path.join(args.data_root, 'MSCoco')
-    args.coco_path = "/data/data/MSCoco/2014"
+    if args.coco_path is None:
+        args.coco_path = "/data/data/MSCoco/2014"
     args.airbus_path = os.path.join(args.data_root, 'airbus-ship-detection')
     args.imagenet_path = os.path.join(args.data_root, 'ilsvrc')
     args.imagenet100_path = os.path.join(args.data_root, 'ilsvrc100')
@@ -379,6 +380,8 @@ def set_dataset_path(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Deformable DETR training and evaluation script', parents=[get_args_parser()])
     args = parser.parse_args()
+    assert (args.shot in [1, 2, 3, 5, 10, 30]), "Unsupported shot: {}".format(args.shot)
+    assert (int(args.fewshot_seed) <= 9) and (int(args.fewshot_seed) >= 1), "Unsupported seed: {}".format(args.seed)
     set_dataset_path(args)
     set_model_defaults(args)
 
