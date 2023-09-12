@@ -202,12 +202,15 @@ class CocoDetectionFew(TvCocoDetectionFew):
         for ann in anns[1:]:
             if os.path.isfile(ann) and ann.split(".")[-1] == "json":
                 ids_a = set(self.ids)
+                annIds_a = set(self.coco.anns.keys())
                 coco = COCO(ann)
                 ids_b = set(coco.imgs.keys())
-                self.ids = sorted(list(ids_a.intersection(ids_b)))
+                annIds_b = set(coco.anns.keys())
             elif os.path.isdir(ann):
                 ids_a = set(self.ids)
                 ids_b = set()
+                annIds_a = set(self.coco.anns.keys())
+                annIds_b = set()
                 for ann_json in os.listdir(ann):
                     if ann_json.split(".")[-1] != "json":
                         continue
@@ -216,7 +219,10 @@ class CocoDetectionFew(TvCocoDetectionFew):
                             continue
                     coco = COCO(os.path.join(ann, ann_json))
                     ids_b.update(coco.imgs.keys())
-                self.ids = sorted(list(ids_a.intersection(ids_b)))
+                    annIds_b.update(coco.anns.keys())
+            self.ids = sorted(list(ids_a.intersection(ids_b)))
+            self.coco.imgs = {k: self.coco.imgs[k] for k in self.ids}
+            self.coco.anns = {k: self.coco.anns[k] for k in annIds_a.intersection(annIds_b)}
         # filter image ids
         if len(filter_classes) > 0:
             # filter image ids
