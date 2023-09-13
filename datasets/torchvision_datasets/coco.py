@@ -136,8 +136,7 @@ class CocoDetectionFew(VisionDataset):
         """
         coco = self.coco
         img_id = self.ids[index]
-        # ann_ids = coco.getAnnIds(imgIds=img_id, catIds=cats)
-        anns = list(filter(lambda x: x["image_id"] == 159118, self.coco.anns.values()))
+        anns = list(filter(lambda x: x["image_id"] == img_id, self.coco.anns.values()))
         ann_ids = list(map(lambda x: x["id"], anns))
         target = coco.loadAnns(ann_ids)
 

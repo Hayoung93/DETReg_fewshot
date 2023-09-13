@@ -221,8 +221,9 @@ class CocoDetectionFew(TvCocoDetectionFew):
                     ids_b.update(coco.imgs.keys())
                     annIds_b.update(coco.anns.keys())
             self.ids = sorted(list(ids_a.intersection(ids_b)))
-            self.coco.imgs = {k: self.coco.imgs[k] for k in self.ids}
-            self.coco.anns = {k: self.coco.anns[k] for k in annIds_a.intersection(annIds_b)}
+            self.coco.dataset["annotations"] = [self.coco.anns[k] for k in annIds_a.intersection(annIds_b)]
+            self.coco.dataset["images"] = [self.coco.imgs[k] for k in self.ids]
+            self.coco.createIndex()
         # filter image ids
         if len(filter_classes) > 0:
             # filter image ids
