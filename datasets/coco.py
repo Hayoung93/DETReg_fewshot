@@ -201,14 +201,10 @@ class CocoDetectionFew(TvCocoDetectionFew):
         # filter ids with anns (common set)
         for ann in anns[1:]:
             if os.path.isfile(ann) and ann.split(".")[-1] == "json":
-                ids_a = set(self.ids)
                 annIds_a = set(self.coco.anns.keys())
                 coco = COCO(ann)
-                ids_b = set(coco.imgs.keys())
                 annIds_b = set(coco.anns.keys())
             elif os.path.isdir(ann):
-                ids_a = set(self.ids)
-                ids_b = set()
                 annIds_a = set(self.coco.anns.keys())
                 annIds_b = set()
                 for ann_json in os.listdir(ann):
@@ -218,21 +214,11 @@ class CocoDetectionFew(TvCocoDetectionFew):
                         if not "{}shot".format(shot) in ann_json:
                             continue
                     coco = COCO(os.path.join(ann, ann_json))
-                    ids_b.update(coco.imgs.keys())
                     annIds_b.update(coco.anns.keys())
-            self.ids = sorted(list(ids_a.intersection(ids_b)))
-            self.coco.dataset["annotations"] = [self.coco.anns[k] for k in annIds_a.intersection(annIds_b)]
-            self.coco.dataset["images"] = [self.coco.imgs[k] for k in self.ids]
-            self.coco.createIndex()
-        # filter image ids
-        if len(filter_classes) > 0:
-            # filter image ids
-            new_ids = set()
-            for cat in filter_classes:
-                # get image ids that contains current category
-                cat_ids = self.coco.getImgIds(self.ids, cat)
-                new_ids.update(cat_ids)
-            self.ids = sorted(list(new_ids))
+        self.coco.dataset["annotations"] = [self.coco.anns[k] for k in annIds_a.intersection(annIds_b) if self.coco.anns[k]["category_id"] in filter_classes]
+        self.ids = list(set([t["image_id"] for t in self.coco.dataset["annotations"]]))
+        self.coco.dataset["images"] = [self.coco.imgs[k] for k in self.ids]
+        self.coco.createIndex()
 
     def __getitem__(self, idx):
         # filter annotation ids with given classes
@@ -277,11 +263,11 @@ def build_fewshot(args, trainval, classset, shot):
     elif classset =="all":
         if trainval == "train":
             img_folder = os.path.join(str(root), "train2014")
-            filter_classes = []
+            filter_classes = base_classes + novel_classes
             anns = [os.path.join(args.coco_path, "annotations", "instances_train2014.json"), os.path.join(args.coco_fewshot_path, "seed" + args.fewshot_seed)]
         elif trainval == "val":
             img_folder = os.path.join(str(root), "val2014")
-            filter_classes = []
+            filter_classes = base_classes + novel_classes
             anns = [os.path.join(args.coco_path, "annotations", "instances_val2014.json"), os.path.join(args.coco_fewshot_path, "seed" + args.fewshot_seed)]
     elif classset == "novel":
         assert trainval == "val", "Only validation mode is supported when novel classes is selected"
