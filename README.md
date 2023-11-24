@@ -1,5 +1,5 @@
 # Modified codes from https://github.com/amirbar/DETReg, adding few-shot training process (table 3, 4 of the origin paper) using few-shot splits from https://github.com/ucbdrive/few-shot-object-detection
-## Note: CPU memory increases while training due to an unknown reason!
+## Note: ~CPU memory increases while training due to an unknown reason!~ This problem is due to versions of some packages. Check ![this link](https://github.com/facebookresearch/fastMRI/issues/215)
 Usage: 
 ```
 GPUS_PER_NODE=8 ./tools/run_dist_launch.sh 8 ./configs/DETReg_fine_tune_full_coco.sh --batch_size 2 --num_workers 0 --finetune_base_epochs 0 --finetune_few_epochs 2 --output_dir temp --dataset coco_few 
